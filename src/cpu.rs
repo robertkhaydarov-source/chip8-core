@@ -1,3 +1,23 @@
+
+pub const CHIP8_FONTSET: [u8; 80] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
+
 pub struct Cpu {
     pub memory: [u8; 4096],
     pub v: [u8; 16],
@@ -12,8 +32,10 @@ pub struct Cpu {
 }
 impl Cpu {
     pub fn new() -> Self {
+        let mut memory = [0; 4096];
+        memory[0x050..0x0A0].copy_from_slice(&CHIP8_FONTSET);
         Self {
-            memory: [0; 4096],
+            memory,
             v: [0; 16],
             i: 0,
             pc: 0x200,
@@ -46,14 +68,20 @@ impl Cpu {
             (0, 0, 0, 0) => return,//NOP
             (0, 0, 0xE, 0) => self.display = [false; 64 * 32],
 
-
-
-
             (1, _, _, _) => {
                 let nnn = opcode & 0x0FFF;
                 self.pc = nnn
             },
 
+            (2, _, _, _) =>{ //call
+                self.stack[self.sp] = self.pc;
+                self.sp += 1;
+                self.pc = opcode & 0x0FFF;
+            }
+            (0, 0, 0xE, 0xE) => {
+                self.sp-=1;
+                self.pc = self.stack[self.sp];
+            }
 
             (6, x, _, _) => {
                 let nn = (opcode & 0x00FF) as u8;
@@ -82,7 +110,20 @@ mod tests {
         cpu.tick();
         assert_eq!(cpu.pc, 0x300);
         assert_eq!(cpu.v[2], 15);
+    }
+    #[test]
+    fn test_subroutine_call_and_ret(){
+        let mut cpu = Cpu::new();
+        assert_eq!(cpu.memory[0x050], 0xF0);
+        cpu.load_rom(&[0x22, 0x04, 0x60, 0x01, 0x61, 0x05, 0x00, 0xEE]);
 
+        cpu.tick();
+        cpu.tick();
+        cpu.tick();
+        cpu.tick();
+        assert_eq!(cpu.v[1], 5);
+        assert_eq!(cpu.v[0], 1);
+        assert_eq!(cpu.sp, 0);
 
     }
 
