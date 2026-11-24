@@ -1,4 +1,4 @@
-
+/// Встроенный набор шрифтов CHIP-8 (16 символов 0–F, по 5 байт на каждый символ).
 pub const CHIP8_FONTSET: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -19,15 +19,25 @@ pub const CHIP8_FONTSET: [u8; 80] = [
 ];
 /// Виртуальный процессор CHIP-8: память 4 КБ, регистры V0–VF, стек, таймеры, экран 64x32 и клавиатура.
 pub struct Cpu {
+    /// Оперативная память 4 КБ (0x000–0x1FF: система и шрифты, 0x200–0xFFF: ROM)
     pub memory: [u8; 4096],
+    /// Регистры общего назначения V0–VF (VF используется как регистр флагов).
     pub v: [u8; 16],
+    /// 16-битный индексный регистр I для хранения адресов памяти.
     pub i: u16,
+    /// Счётчик команд (Program Counter), указывает на текущую инструкцию.
     pub pc: u16,
+    /// Стек вызовов (до 16 вложенных подпрограмм).
     pub stack: [u16; 16],
+    /// Указатель вершины стека (Stack Pointer).
     pub sp: usize,
+    /// Таймер задержки (уменьшается с частотой 60 Гц).
     pub delay_timer: u8,
+    /// Звуковой таймер (подаёт сигнал, пока > 0; уменьшается с частотой 60 Гц).
     pub sound_timer: u8,
+    /// Монохромный видеобуфер 64×32 пикселя (true — пиксель горит).
     pub display: [bool; 64 * 32],
+    /// Состояние 16-клавишной клавиатуры (true — клавиша нажата).
     pub keypad: [bool; 16],
     seed: u32
 }
@@ -289,13 +299,23 @@ impl Cpu {
             _ => unimplemented!("неизвестный опкод: {:#06X}", opcode),
         }
     }
+    /// Уменьшает таймеры задержки и звука на 1, если они больше нуля (частота 60 Гц).
+    pub fn tick_timer(&mut self){
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
+    }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn test_tick(){
 
+    #[test]
+    // Проверка базового цикла: загрузка константы (6XNN), сложение (7XNN) и переход (1NNN)
+    fn test_tick(){
         let mut cpu = Cpu::new();
         cpu.load_rom(&[0x62, 0x0A, 0x72, 0x05, 0x13, 0x00]);
         cpu.tick();
@@ -305,6 +325,7 @@ mod tests {
         assert_eq!(cpu.v[2], 15);
     }
     #[test]
+    // Проверка базового цикла: загрузка константы (6XNN), сложение (7XNN) и переход (1NNN)
     fn test_subroutine_call_and_ret(){
         let mut cpu = Cpu::new();
         assert_eq!(cpu.memory[0x050], 0xF0);
@@ -320,6 +341,7 @@ mod tests {
 
     }
     #[test]
+    // Проверка арифметики с переполнением (8XY4) и вычитания с заёмом (8XY5) + флаг VF
     fn test_arithmetic_and_flags(){
         let mut cpu = Cpu::new();
         cpu.load_rom(&[0x60, 0xC8,  0x61, 0x64, 0x80, 0x14, 0x80, 0x15]);
@@ -332,6 +354,7 @@ mod tests {
         assert_eq!(cpu.v[0xF], 0);
     }
     #[test]
+    // Проверка отрисовки спрайта (DXYN), стирания через XOR и установки флага коллизии VF
     fn test_draw_and_collision(){
         let mut cpu = Cpu::new();
         cpu.load_rom(&[0xA0, 0x50, 0x60, 0x00, 0x61, 0x00, 0xD0, 0x11, 0xD0, 0x11]);
@@ -347,6 +370,7 @@ mod tests {
         assert_eq!(cpu.v[0xF], 1);
     }
     #[test]
+    // Проверка разложения числа на сотни, десятки и единицы (BCD, опкод FX33)
     fn test_bcd(){
         let mut cpu = Cpu::new();
         cpu.load_rom(&[0x60, 0xEA, 0xA3, 0x00, 0xF0, 0x33]);
@@ -354,6 +378,27 @@ mod tests {
         cpu.tick();
         cpu.tick();
         assert_eq!(cpu.memory[0x300..0x303], [2, 3, 4]);
+    }
+
+    // Прогон официального тестового ROM corax89 с выводом экрана 64x32 в консоль
+    #[test]
+    fn test_core89_rom(){
+        let mut cpu = Cpu::new();
+        cpu.load_rom(include_bytes!("../roms/test_opcode.ch8"));
+        for _ in 0..500{
+            cpu.tick();
+        }
+        for y in 0..32{
+            for x in 0..64{
+                if cpu.display[y*64+x]{
+                    print!("██")
+                }
+                else {
+                    print!("  ")
+                }
+            }
+            println!();
+        }
     }
 
 }
